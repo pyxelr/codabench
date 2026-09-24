@@ -1,6 +1,17 @@
 FROM almalinux:10-minimal AS builder
 
-RUN microdnf update -y --nodocs && microdnf install -y tar gzip &&  microdnf clean all
+# The roche_ca secret is optional (required=false): outside the Roche network the
+# mount is absent and this builds exactly like upstream. Inside it, the corporate
+# TLS-interception CA has to be trusted or microdnf cannot reach the mirrors.
+# The anchor file is written into the layer, so the trust survives into the
+# squashed stage below and is still present for the uv installer.
+RUN --mount=type=secret,id=roche_ca,target=/tmp/roche-ca.crt,required=false \
+    if [ -s /tmp/roche-ca.crt ]; then \
+        cp /tmp/roche-ca.crt /etc/pki/ca-trust/source/anchors/roche-ca.crt \
+        && update-ca-trust 2>/dev/null \
+        || cat /tmp/roche-ca.crt >> /etc/pki/tls/certs/ca-bundle.crt; \
+    fi \
+    && microdnf update -y --nodocs && microdnf install -y tar gzip &&  microdnf clean all
 
 FROM scratch
 

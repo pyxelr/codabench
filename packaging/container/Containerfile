@@ -6,7 +6,15 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY src/static ./src/static
 
-RUN npm install \
+# The roche_ca secret is optional (required=false): outside the Roche network the
+# mount is absent and this builds exactly like upstream. Inside it, the corporate
+# TLS-interception CA has to be trusted or npm cannot reach the registry.
+RUN --mount=type=secret,id=roche_ca,target=/tmp/roche-ca.crt,required=false \
+    if [ -s /tmp/roche-ca.crt ]; then \
+        cat /tmp/roche-ca.crt >> /etc/ssl/certs/ca-certificates.crt; \
+        export NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt; \
+    fi \
+    && npm install \
     && export PATH=./node_modules/.bin:$PATH \
     && npm run build-stylus \
     && npm run build-riot \
@@ -15,7 +23,14 @@ RUN npm install \
 # Stage 2: Python/Django
 FROM almalinux:10-minimal
 
-RUN microdnf update -y --nodocs && microdnf install -y tar gzip &&  microdnf clean all
+# Same optional Roche CA injection, for microdnf and for the uv installer below.
+RUN --mount=type=secret,id=roche_ca,target=/tmp/roche-ca.crt,required=false \
+    if [ -s /tmp/roche-ca.crt ]; then \
+        cp /tmp/roche-ca.crt /etc/pki/ca-trust/source/anchors/roche-ca.crt \
+        && update-ca-trust 2>/dev/null \
+        || cat /tmp/roche-ca.crt >> /etc/pki/tls/certs/ca-bundle.crt; \
+    fi \
+    && microdnf update -y --nodocs && microdnf install -y tar gzip &&  microdnf clean all
 
 ENV PYTHONUNBUFFERED=1
 
