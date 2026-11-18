@@ -30,6 +30,10 @@ RUN --mount=type=secret,id=roche_ca,target=/tmp/roche-ca.crt,required=false \
         && update-ca-trust 2>/dev/null \
         || cat /tmp/roche-ca.crt >> /etc/pki/tls/certs/ca-bundle.crt; \
     fi \
+    # Use AlmaLinux's own repositories over HTTPS instead of the geo-selected
+    # mirrorlist, which hands out plain-http third-party mirrors.
+    && sed -i -e 's|^mirrorlist=|#mirrorlist=|' -e 's|^# *baseurl=|baseurl=|' /etc/yum.repos.d/almalinux-*.repo \
+    && ! grep -qE '^(mirrorlist|baseurl)=http:' /etc/yum.repos.d/*.repo \
     && microdnf update -y --nodocs && microdnf install -y tar gzip &&  microdnf clean all
 
 ENV PYTHONUNBUFFERED=1
